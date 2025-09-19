@@ -263,4 +263,146 @@ export class DeterministicP256 {
     // Key must be in range [1, n-1]
     return keyValue > 0n && keyValue < curveOrder;
   }
+
+  /**
+   * Converts a raw ECDSA signature (64 bytes: 32 bytes r + 32 bytes s) to DER format.
+   * 
+   * @param rawSignature - 64-byte raw signature (32 bytes r + 32 bytes s)
+   * @returns DER-encoded signature
+   */
+  public rawToDER(rawSignature: Uint8Array): Uint8Array {
+    if (rawSignature.length !== 64) {
+      throw new Error('Raw signature must be exactly 64 bytes');
+    }
+
+    const r = rawSignature.slice(0, 32);
+    const s = rawSignature.slice(32, 64);
+
+    // Convert to DER format
+    const rDER = this.encodeDERInteger(r);
+    const sDER = this.encodeDERInteger(s);
+
+    // Build SEQUENCE
+    const content = new Uint8Array(rDER.length + sDER.length);
+    content.set(rDER, 0);
+    content.set(sDER, rDER.length);
+
+    // DER SEQUENCE tag (0x30) + length + content
+    return this.encodeDERSequence(content);
+  }
+
+  /**
+   * Converts a DER-encoded ECDSA signature to raw format (64 bytes: 32 bytes r + 32 bytes s).
+   * 
+   * @param derSignature - DER-encoded signature
+   * @returns 64-byte raw signature (32 bytes r + 32 bytes s)
+   */
+  public derToRaw(derSignature: Uint8Array): Uint8Array {
+    if (derSignature[0] !== 0x30) {
+      throw new Error('Invalid DER signature: must start with SEQUENCE tag (0x30)');
+    }
+
+    let offset = 1;
+    const sequenceLength = this.decodeDERLength(derSignature, offset);
+    offset += this.getDERLengthSize(derSignature[offset]);
+
+    // Parse r
+    if (derSignature[offset] !== 0x02) {
+      throw new Error('Invalid DER signature: expected INTEGER tag (0x02) for r');
+    }
+    offset++;
+    const rLength = this.decodeDERLength(derSignature, offset);
+    offset += this.getDERLengthSize(derSignature[offset]);
+    const rBytes = derSignature.slice(offset, offset + rLength);
+    offset += rLength;
+
+    // Parse s
+    if (derSignature[offset] !== 0x02) {
+      throw new Error('Invalid DER signature: expected INTEGER tag (0x02) for s');
+    }
+    offset++;
+    const sLength = this.decodeDERLength(derSignature, offset);
+    offset += this.getDERLengthSize(derSignature[offset]);
+    const sBytes = derSignature.slice(offset, offset + sLength);
+
+    // Convert to 32-byte arrays (pad with zeros if needed, remove leading zeros if present)
+    const r = this.padTo32Bytes(rBytes);
+    const s = this.padTo32Bytes(sBytes);
+
+    // Combine r and s
+    const result = new Uint8Array(64);
+    result.set(r, 0);
+    result.set(s, 32);
+
+    return result;
+  }
+
+  private encodeDERInteger(bytes: Uint8Array): Uint8Array {
+    // Remove leading zeros
+    let start = 0;
+    while (start < bytes.length && bytes[start] === 0) {
+      start++;
+    }
+
+    // If all bytes were zero, keep one zero
+    if (start === bytes.length) {
+      start = bytes.length - 1;
+    }
+
+    let content = bytes.slice(start);
+
+    // If the first bit is set, prepend a zero byte to indicate positive integer
+    if (content[0] & 0x80) {
+      const padded = new Uint8Array(content.length + 1);
+      padded[0] = 0x00;
+      padded.set(content, 1);
+      content = padded;
+    }
+
+    // INTEGER tag (0x02) + length + content
+    const result = new Uint8Array(2 + content.length);
+    result[0] = 0x02; // INTEGER tag
+    result[1] = content.length; // length
+    result.set(content, 2);
+
+    return result;
+  }
+
+  private encodeDERSequence(content: Uint8Array): Uint8Array {
+    const result = new Uint8Array(2 + content.length);
+    result[0] = 0x30; // SEQUENCE tag
+    result[1] = content.length; // length
+    result.set(content, 2);
+    return result;
+  }
+
+  private decodeDERLength(data: Uint8Array, offset: number): number {
+    const firstByte = data[offset];
+    if (firstByte & 0x80) {
+      throw new Error('Long form DER length encoding not supported in this implementation');
+    }
+    return firstByte;
+  }
+
+  private getDERLengthSize(lengthByte: number): number {
+    return 1; // We only support short form (length < 128)
+  }
+
+  private padTo32Bytes(bytes: Uint8Array): Uint8Array {
+    if (bytes.length === 32) {
+      return bytes;
+    } else if (bytes.length < 32) {
+      // Pad with leading zeros
+      const result = new Uint8Array(32);
+      result.set(bytes, 32 - bytes.length);
+      return result;
+    } else {
+      // Remove leading zeros (should not happen in well-formed signatures)
+      let start = 0;
+      while (start < bytes.length - 32 && bytes[start] === 0) {
+        start++;
+      }
+      return bytes.slice(start, start + 32);
+    }
+  }
 }
