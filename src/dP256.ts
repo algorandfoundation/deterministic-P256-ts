@@ -105,20 +105,16 @@ export class DeterministicP256 {
     const entropyBuffer = new Uint8Array(entropy).buffer;
     const saltBuffer = new Uint8Array(salt).buffer;
 
-    const key = await crypto.subtle.importKey(
-      'raw',
-      entropyBuffer,
-      { name: 'PBKDF2' },
-      false,
-      ['deriveBits']
-    );
+    const key = await crypto.subtle.importKey('raw', entropyBuffer, { name: 'PBKDF2' }, false, [
+      'deriveBits',
+    ]);
 
     const derivedBits = await crypto.subtle.deriveBits(
       {
         name: 'PBKDF2',
         salt: saltBuffer,
         iterations: iterationCount,
-        hash: 'SHA-512'
+        hash: 'SHA-512',
       },
       key,
       keyLengthBytes * 8
@@ -164,7 +160,8 @@ export class DeterministicP256 {
     const counterBytes = new Uint8Array(counterBuffer);
 
     // Concatenate all inputs
-    const totalLength = derivedMainKey.length + originBytes.length + userHandleBytes.length + counterBytes.length;
+    const totalLength =
+      derivedMainKey.length + originBytes.length + userHandleBytes.length + counterBytes.length;
     const concat = new Uint8Array(totalLength);
     let offset = 0;
 
@@ -266,7 +263,7 @@ export class DeterministicP256 {
 
   /**
    * Converts a raw ECDSA signature (64 bytes: 32 bytes r + 32 bytes s) to DER format.
-   * 
+   *
    * @param rawSignature - 64-byte raw signature (32 bytes r + 32 bytes s)
    * @returns DER-encoded signature
    */
@@ -293,7 +290,7 @@ export class DeterministicP256 {
 
   /**
    * Converts a DER-encoded ECDSA signature to raw format (64 bytes: 32 bytes r + 32 bytes s).
-   * 
+   *
    * @param derSignature - DER-encoded signature
    * @returns 64-byte raw signature (32 bytes r + 32 bytes s)
    */
@@ -305,6 +302,12 @@ export class DeterministicP256 {
     let offset = 1;
     const sequenceLength = this.decodeDERLength(derSignature, offset);
     offset += this.getDERLengthSize(derSignature[offset]);
+
+    // Validate that the sequence length matches the remaining data
+    const expectedEnd = offset + sequenceLength;
+    if (expectedEnd !== derSignature.length) {
+      throw new Error('Invalid DER signature: sequence length mismatch');
+    }
 
     // Parse r
     if (derSignature[offset] !== 0x02) {
@@ -385,7 +388,12 @@ export class DeterministicP256 {
   }
 
   private getDERLengthSize(lengthByte: number): number {
-    return 1; // We only support short form (length < 128)
+    // For short form (length < 128), the length byte itself contains the length
+    // For long form (length >= 128), the length byte has bit 7 set and bits 0-6 contain the number of subsequent bytes
+    if (lengthByte & 0x80) {
+      throw new Error('Long form DER length encoding not supported in this implementation');
+    }
+    return 1; // Short form always uses 1 byte
   }
 
   private padTo32Bytes(bytes: Uint8Array): Uint8Array {
