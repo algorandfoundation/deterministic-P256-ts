@@ -13,7 +13,7 @@ A TypeScript implementation for generating deterministic P-256 keypairs from BIP
 ## Installation
 
 ```bash
-npm install dp256-ts
+npm install @algorandfoundation/dp256
 ```
 
 ## Usage
@@ -21,7 +21,7 @@ npm install dp256-ts
 ### Basic Example
 
 ```typescript
-import { DeterministicP256 } from 'dp256-ts';
+import { DeterministicP256 } from '@algorandfoundation/dp256';
 
 const dp256 = new DeterministicP256();
 
