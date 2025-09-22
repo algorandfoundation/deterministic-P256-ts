@@ -1,6 +1,6 @@
 {
   "name": "@algorandfoundation/dp256",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "Package used to deterministically generate P256 keypairs, using BIP39.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
