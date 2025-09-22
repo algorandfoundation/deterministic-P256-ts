@@ -11,6 +11,7 @@
     "CHANGELOG.md"
   ],
   "publishConfig": {
+    "provenance": true,
     "access": "public"
   },
   "keywords": [
