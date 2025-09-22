@@ -26,14 +26,15 @@ import { DeterministicP256 } from 'dp256-ts';
 const dp256 = new DeterministicP256();
 
 // Step 1: Generate derived main key from BIP39 phrase
-const phrase = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+const phrase =
+  'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const derivedKey = await dp256.genDerivedMainKeyWithBIP39(phrase);
 
 // Step 2: Generate domain-specific keypair
 const privateKey = await dp256.genDomainSpecificKeyPair(
   derivedKey,
   'webauthn.example.com', // origin/domain
-  'alice@example.com'     // user handle
+  'alice@example.com' // user handle
 );
 
 // Step 3: Get public key bytes
@@ -56,7 +57,7 @@ const customDerivedKey = await dp256.genDerivedMainKeyWithBIP39(
   phrase,
   new TextEncoder().encode('custom-salt'), // custom salt
   100_000, // iteration count
-  512      // key length in bits
+  512 // key length in bits
 );
 
 // Multiple keypairs for same domain using counter

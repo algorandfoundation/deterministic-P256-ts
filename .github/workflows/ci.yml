@@ -2,9 +2,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
 
 jobs:
   test:
@@ -92,7 +92,7 @@ jobs:
         run: npm audit --audit-level moderate
         continue-on-error: true
 
-      - name: Check for known vulnerabilities  
+      - name: Check for known vulnerabilities
         run: npx audit-ci --moderate
         continue-on-error: true
 
