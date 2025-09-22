@@ -309,4 +309,97 @@ describe('DeterministicP256', () => {
       expect(Array.from(privateKey3)).toEqual(Array.from(privateKey4));
     });
   });
+
+  describe('error handling and edge cases', () => {
+    it('should reject invalid raw signature length in rawToDER', () => {
+      const invalidSignature = new Uint8Array(63); // Wrong length
+      expect(() => D.rawToDER(invalidSignature)).toThrow('Raw signature must be exactly 64 bytes');
+
+      const invalidSignature2 = new Uint8Array(65); // Wrong length
+      expect(() => D.rawToDER(invalidSignature2)).toThrow('Raw signature must be exactly 64 bytes');
+    });
+
+    it('should reject invalid DER signatures in derToRaw', () => {
+      // Test invalid DER signature that doesn't start with SEQUENCE tag
+      const invalidDER1 = new Uint8Array([0x31, 0x44]); // Wrong tag
+      expect(() => D.derToRaw(invalidDER1)).toThrow(
+        'Invalid DER signature: must start with SEQUENCE tag (0x30)'
+      );
+
+      // Test DER with sequence length mismatch
+      const invalidDER2 = new Uint8Array([0x30, 0x10, 0x02, 0x01, 0x01]); // Length doesn't match data
+      expect(() => D.derToRaw(invalidDER2)).toThrow(
+        'Invalid DER signature: sequence length mismatch'
+      );
+
+      // Test DER without proper INTEGER tag for r
+      const invalidDER3 = new Uint8Array([0x30, 0x04, 0x03, 0x01, 0x01, 0x02]); // Wrong tag for r
+      expect(() => D.derToRaw(invalidDER3)).toThrow(
+        'Invalid DER signature: expected INTEGER tag (0x02) for r'
+      );
+
+      // Test DER without proper INTEGER tag for s
+      const invalidDER4 = new Uint8Array([0x30, 0x06, 0x02, 0x01, 0x01, 0x03, 0x01, 0x01]); // Wrong tag for s
+      expect(() => D.derToRaw(invalidDER4)).toThrow(
+        'Invalid DER signature: expected INTEGER tag (0x02) for s'
+      );
+
+      // Test DER with long form length encoding (not supported)
+      const invalidDER5 = new Uint8Array([0x30, 0x81, 0x04, 0x02, 0x01, 0x01, 0x02, 0x01, 0x01]); // Long form length with proper total length
+      expect(() => D.derToRaw(invalidDER5)).toThrow(
+        'Long form DER length encoding not supported in this implementation'
+      );
+
+      // Test DER with long form length encoding in integer field
+      const invalidDER6 = new Uint8Array([
+        0x30, 0x08, 0x02, 0x82, 0x00, 0x01, 0x01, 0x02, 0x01, 0x01,
+      ]); // Long form in r length with proper structure
+      expect(() => D.derToRaw(invalidDER6)).toThrow(
+        'Long form DER length encoding not supported in this implementation'
+      );
+    });
+
+    it('should handle DER signatures with oversized integers requiring padding', () => {
+      // Create a valid DER signature with integers that have extra leading zeros
+      // This tests the padTo32Bytes method when it needs to trim oversized inputs
+
+      // Create r value with leading zeros (33 bytes total, should be trimmed to 32)
+      const rBytes = new Uint8Array(33);
+      rBytes[0] = 0x00; // Leading zero
+      for (let i = 1; i < 33; i++) {
+        rBytes[i] = 0x01; // Fill with 0x01 for easy identification
+      }
+
+      // Create s value (normal 32 bytes)
+      const sBytes = new Uint8Array(32);
+      for (let i = 0; i < 32; i++) {
+        sBytes[i] = 0x02; // Fill with 0x02
+      }
+
+      // Properly construct DER signature
+      // Structure: 0x30 <length> 0x02 <r-length> <r-bytes> 0x02 <s-length> <s-bytes>
+      // Content length = 2 + 33 + 2 + 32 = 69 bytes for the inner content
+      const contentLength = 2 + rBytes.length + 2 + sBytes.length; // 69
+      const derSig = new Uint8Array(2 + contentLength);
+
+      let offset = 0;
+      derSig[offset++] = 0x30; // SEQUENCE tag
+      derSig[offset++] = contentLength; // Total content length (69)
+      derSig[offset++] = 0x02; // INTEGER tag for r
+      derSig[offset++] = rBytes.length; // Length of r (33)
+      derSig.set(rBytes, offset);
+      offset += rBytes.length;
+      derSig[offset++] = 0x02; // INTEGER tag for s
+      derSig[offset++] = sBytes.length; // Length of s (32)
+      derSig.set(sBytes, offset);
+
+      const result = D.derToRaw(derSig);
+      expect(result.length).toBe(64);
+
+      // The r component should be the last 32 bytes of rBytes (trimmed leading zeros)
+      const expectedR = rBytes.slice(1); // Remove leading zero
+      expect(Array.from(result.slice(0, 32))).toEqual(Array.from(expectedR));
+      expect(Array.from(result.slice(32, 64))).toEqual(Array.from(sBytes));
+    });
+  });
 });
