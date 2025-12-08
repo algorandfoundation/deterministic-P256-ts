@@ -14,6 +14,8 @@
  */
 
 import { p256 } from '@noble/curves/nist';
+import { pbkdf2 } from '@noble/hashes/pbkdf2';
+import { sha256, sha512 } from '@noble/hashes/sha2';
 import { validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
 
@@ -101,26 +103,11 @@ export class DeterministicP256 {
     iterationCount: number,
     keyLengthBytes: number
   ): Promise<Uint8Array> {
-    // Convert Uint8Array to proper ArrayBuffer for Web Crypto API
-    const entropyBuffer = new Uint8Array(entropy).buffer;
-    const saltBuffer = new Uint8Array(salt).buffer;
-
-    const key = await crypto.subtle.importKey('raw', entropyBuffer, { name: 'PBKDF2' }, false, [
-      'deriveBits',
-    ]);
-
-    const derivedBits = await crypto.subtle.deriveBits(
-      {
-        name: 'PBKDF2',
-        salt: saltBuffer,
-        iterations: iterationCount,
-        hash: 'SHA-512',
-      },
-      key,
-      keyLengthBytes * 8
-    );
-
-    return new Uint8Array(derivedBits);
+    const derived = pbkdf2(sha512, entropy, salt, {
+      c: iterationCount,
+      dkLen: keyLengthBytes,
+    });
+    return new Uint8Array(derived);
   }
 
   /**
@@ -176,9 +163,8 @@ export class DeterministicP256 {
 
     concat.set(counterBytes, offset);
 
-    // Calculate SHA-512 hash
-    const hashBuffer = await crypto.subtle.digest('SHA-512', concat);
-    const hash = new Uint8Array(hashBuffer);
+    // Calculate SHA-512 hash using @noble/hashes
+    const hash = sha512(concat);
 
     // Use first 32 bytes as seed for private key
     const seed = hash.slice(0, 32);
@@ -188,9 +174,8 @@ export class DeterministicP256 {
     if (this.isValidPrivateKey(seed)) {
       return seed;
     } else {
-      // Fallback: hash the seed again if it's not valid
-      const fallbackHashBuffer = await crypto.subtle.digest('SHA-256', seed);
-      const fallbackSeed = new Uint8Array(fallbackHashBuffer);
+      // Fallback: hash the seed again if it's not valid using SHA-256
+      const fallbackSeed = sha256(seed);
 
       if (this.isValidPrivateKey(fallbackSeed)) {
         return fallbackSeed;
